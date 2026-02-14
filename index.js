@@ -4,59 +4,56 @@ const axios = require("axios");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.get("/", (req, res) => { res.send("Bot 'Çift Mesaj' Modunda aktif."); });
+app.get("/", (req, res) => { res.send("Bot 'Sadece Mesaj' Modunda Aktif."); });
 app.listen(PORT, () => { console.log(`Sunucu ${PORT} portunda aktif.`); });
 
 const token = process.env.TOKEN;
 const channelId = process.env.CHANNEL_ID;
-// İki farklı mesajı alıyoruz
 const message1 = process.env.MESSAGE1;
 const message2 = process.env.MESSAGE2;
 
-let currentMessageIsFirst = true; // Sırayla göndermek için kontrol değişkeni
+let isFirstMessage = true;
 
+// Rastgele süre üretici (Saniye cinsinden)
 const getRandomTime = (min, max) => Math.floor(Math.random() * (max - min + 1) + min) * 1000;
 
 async function startSequence() {
-    const url = `https://discord.com/api/v9/channels/${channelId}`;
+    if (!token || !channelId || !message1 || !message2) {
+        console.error("❌ HATA: MESSAGE1, MESSAGE2 veya diğer değişkenler eksik!");
+        return;
+    }
+
+    const url = `https://discord.com/api/v9/channels/${channelId}/messages`;
     const headers = {
-        "Authorization": token,
+        "Authorization": token.trim(),
         "Content-Type": "application/json",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
     };
 
-    // Hangi mesajın gönderileceğini seç
-    const messageToSend = currentMessageIsFirst ? message1 : message2;
+    const currentMsg = isFirstMessage ? message1 : message2;
 
     try {
-        console.log(`--- Döngü Başladı (${currentMessageIsFirst ? "Mesaj 1" : "Mesaj 2"}) ---`);
+        console.log(`--- Döngü: ${isFirstMessage ? "Mesaj 1" : "Mesaj 2"} gönderiliyor ---`);
         
-        // 1. Yazıyor efekti
-        await axios.post(`${url}/typing`, {}, { headers });
-        
-        // 2. 3-5 saniye yazıyor simülasyonu
-        const writingTime = getRandomTime(3, 5);
-        await new Promise(resolve => setTimeout(resolve, writingTime));
+        // Doğrudan mesajı gönder
+        await axios.post(url, { content: currentMsg }, { headers });
+        console.log(`✅ Gönderildi: ${currentMsg}`);
 
-        // 3. Mesajı gönder
-        await axios.post(`${url}/messages`, { content: messageToSend }, { headers });
-        console.log(`✅ Gönderildi: ${messageToSend.substring(0, 20)}...`);
+        // Mesajı değiştir
+        isFirstMessage = !isFirstMessage;
 
-        // Sıradaki mesajı değiştir
-        currentMessageIsFirst = !currentMessageIsFirst;
-
-        // 4. Bekleme süresi (Toplam 10 saniyeyi aşmamak için 3-5 sn ara)
-        const nextLoop = getRandomTime(3, 5);
+        // 8 ile 10 saniye arası rastgele bekle (Ban yememek için en güvenli aralık)
+        const nextLoop = getRandomTime(8, 10);
+        console.log(`😴 ${nextLoop/1000} saniye ara verildi...`);
         setTimeout(startSequence, nextLoop);
 
     } catch (err) {
-        console.error(`❌ Hata: ${err.response?.status || 'Bağlantı hatası'}`);
-        setTimeout(startSequence, 20000); // Hata durumunda dinlen
+        console.error(`❌ HATA: ${err.response?.status}`);
+        console.error(`❌ DETAY: ${JSON.stringify(err.response?.data)}`);
+        
+        // Hata (örneğin internet kesilmesi veya rate limit) durumunda 20 saniye dinlen
+        setTimeout(startSequence, 20000); 
     }
 }
 
-if (token && channelId && message1 && message2) {
-    startSequence();
-} else {
-    console.error("HATA: Değişkenler (MESSAGE1 veya MESSAGE2) eksik!");
-}
+startSequence();
