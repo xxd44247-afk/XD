@@ -4,57 +4,59 @@ const axios = require("axios");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.get("/", (req, res) => {
-  res.send("Bot aktif: 5 saniye yazıyor görünüp mesaj atıyor!");
-});
-
-app.listen(PORT, () => {
-  console.log(`Sunucu ${PORT} portunda dinleniyor.`);
-});
+app.get("/", (req, res) => { res.send("Bot 'Çift Mesaj' Modunda aktif."); });
+app.listen(PORT, () => { console.log(`Sunucu ${PORT} portunda aktif.`); });
 
 const token = process.env.TOKEN;
 const channelId = process.env.CHANNEL_ID;
-const message = process.env.MESSAGE;
+// İki farklı mesajı alıyoruz
+const message1 = process.env.MESSAGE1;
+const message2 = process.env.MESSAGE2;
 
-if (!token || !channelId || !message) {
-    console.error("HATA: TOKEN, CHANNEL_ID veya MESSAGE eksik!");
-} else {
-    // Döngü: İşlem bittikten sonra tekrar başlaması için iç içe setTimeout kullanıyoruz
-    // Bu sayede 5 saniyelik yazma süresi + mesaj atma süresi birbirine karışmaz.
-    startSequence();
-}
+let currentMessageIsFirst = true; // Sırayla göndermek için kontrol değişkeni
+
+const getRandomTime = (min, max) => Math.floor(Math.random() * (max - min + 1) + min) * 1000;
 
 async function startSequence() {
     const url = `https://discord.com/api/v9/channels/${channelId}`;
     const headers = {
         "Authorization": token,
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
     };
 
-    try {
-        console.log("--- Yeni döngü başladı ---");
-        
-        // 1. "Yazıyor..." efektini başlat
-        await axios.post(`${url}/typing`, {}, { headers });
-        console.log("👀 Yazıyor olarak görünüyor (5 saniye beklenecek)...");
+    // Hangi mesajın gönderileceğini seç
+    const messageToSend = currentMessageIsFirst ? message1 : message2;
 
-        // 2. Tam 5 saniye (5000 ms) bekleme
-        setTimeout(async () => {
-            try {
-                // 3. Mesajı gönder
-                await axios.post(`${url}/messages`, { content: message }, { headers });
-                console.log(`✅ Mesaj gönderildi: "${message}"`);
-                
-                // 4. Bir sonraki mesaj için kısa bir ara ver ve döngüyü tekrarla
-                setTimeout(startSequence, 2000); 
-            } catch (err) {
-                console.error("❌ Mesaj hatası:", err.response?.status);
-                setTimeout(startSequence, 5000); // Hata olursa 5 sn sonra tekrar dene
-            }
-        }, 5000); 
+    try {
+        console.log(`--- Döngü Başladı (${currentMessageIsFirst ? "Mesaj 1" : "Mesaj 2"}) ---`);
+        
+        // 1. Yazıyor efekti
+        await axios.post(`${url}/typing`, {}, { headers });
+        
+        // 2. 3-5 saniye yazıyor simülasyonu
+        const writingTime = getRandomTime(3, 5);
+        await new Promise(resolve => setTimeout(resolve, writingTime));
+
+        // 3. Mesajı gönder
+        await axios.post(`${url}/messages`, { content: messageToSend }, { headers });
+        console.log(`✅ Gönderildi: ${messageToSend.substring(0, 20)}...`);
+
+        // Sıradaki mesajı değiştir
+        currentMessageIsFirst = !currentMessageIsFirst;
+
+        // 4. Bekleme süresi (Toplam 10 saniyeyi aşmamak için 3-5 sn ara)
+        const nextLoop = getRandomTime(3, 5);
+        setTimeout(startSequence, nextLoop);
 
     } catch (err) {
-        console.error("❌ Yazıyor hatası:", err.response?.status);
-        setTimeout(startSequence, 5000);
+        console.error(`❌ Hata: ${err.response?.status || 'Bağlantı hatası'}`);
+        setTimeout(startSequence, 20000); // Hata durumunda dinlen
     }
+}
+
+if (token && channelId && message1 && message2) {
+    startSequence();
+} else {
+    console.error("HATA: Değişkenler (MESSAGE1 veya MESSAGE2) eksik!");
 }
